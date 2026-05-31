@@ -55,7 +55,7 @@
       flex: 1;
       position: relative;
     }
-    embed {
+    iframe {
       width: 100%;
       height: 100%;
       border: none;
@@ -80,7 +80,7 @@
     </div>
   </div>
   <div class="viewer-container" id="viewer">
-    <embed id="pdfEmbed" type="application/pdf" width="100%" height="100%">
+    <iframe id="pdfFrame" width="100%" height="100%" style="border:none;"></iframe>
   </div>
 
   <script>
@@ -89,21 +89,10 @@
       const file = params.get('file') || '';
       const title = params.get('title') || '文档查看';
       document.getElementById('docTitle').textContent = title;
-      const embed = document.getElementById('pdfEmbed');
+      const frame = document.getElementById('pdfFrame');
+      frame.src = file + '#toolbar=0&navpanes=0';
 
-      // Build URL with Chrome PDF viewer restrictions
-      const fileUrl = file + '#toolbar=0&navpanes=0&scrollbar=1';
-      embed.src = fileUrl;
-
-      // Prevent common download shortcuts and right-click on embed
-      document.addEventListener('contextmenu', function(e) {
-        if (e.target === embed || e.target.closest('.viewer-container')) {
-          e.preventDefault();
-          return false;
-        }
-      });
-
-      // Prevent Ctrl+S, Ctrl+P on this page
+      // Prevent common download shortcuts
       document.addEventListener('keydown', function(e) {
         if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P')) {
           e.preventDefault();
