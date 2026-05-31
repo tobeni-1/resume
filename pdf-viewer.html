@@ -4,100 +4,162 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文档查看</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #1a1714;
+      background: #faf9f5;
       display: flex;
       flex-direction: column;
       height: 100vh;
       overflow: hidden;
       font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .toolbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 12px 24px;
-      background: #252130;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: #fff;
+      border-bottom: 1px solid #e0dbd2;
       flex-shrink: 0;
+      z-index: 10;
+    }
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
     .toolbar-title {
       font-size: 0.95rem;
-      color: #e8e5df;
-      font-weight: 500;
+      color: #1a1714;
+      font-weight: 600;
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .page-info {
+      font-size: 0.82rem;
+      color: #6b6760;
+    }
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
     .toolbar-btn {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 20px;
-      background: rgba(109,91,158,0.15);
-      border: 1px solid rgba(109,91,158,0.3);
-      color: #a78bfa;
+      padding: 7px 16px;
+      background: #f3efe8;
+      border: 1px solid #e0dbd2;
+      color: #3d3a35;
       border-radius: 9999px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       cursor: pointer;
       text-decoration: none;
       font-weight: 500;
       transition: all 0.2s ease;
     }
     .toolbar-btn:hover {
-      background: rgba(109,91,158,0.25);
-      border-color: rgba(109,91,158,0.5);
+      background: #ede8e0;
+      border-color: #d0cac0;
     }
     .toolbar-hint {
-      font-size: 0.78rem;
-      color: #6b6760;
+      font-size: 0.75rem;
+      color: #a09b95;
     }
     .viewer-container {
       flex: 1;
-      position: relative;
+      overflow-y: auto;
+      background: #e8e5df;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px;
     }
-    iframe {
-      width: 100%;
+    canvas {
+      box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+      margin-bottom: 16px;
+      background: #fff;
+      max-width: 100%;
+      height: auto !important;
+    }
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
       height: 100%;
-      border: none;
-    }
-    /* Overlay to discourage right-click save */
-    .viewer-container::after {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 40px;
-      background: transparent;
-      pointer-events: none;
+      color: #6b6760;
+      font-size: 1rem;
     }
   </style>
 </head>
 <body>
   <div class="toolbar">
-    <span class="toolbar-title" id="docTitle">文档查看</span>
-    <div style="display:flex;align-items:center;gap:16px;">
+    <div class="toolbar-left">
+      <span class="toolbar-title" id="docTitle">文档查看</span>
+      <span class="page-info" id="pageInfo"></span>
+    </div>
+    <div class="toolbar-right">
       <span class="toolbar-hint">仅供在线查看</span>
       <a href="javascript:history.back()" class="toolbar-btn">← 返回</a>
     </div>
   </div>
   <div class="viewer-container" id="viewer">
-    <iframe id="pdfFrame" width="100%" height="100%" style="border:none;"></iframe>
+    <div class="loading" id="loading">正在加载文档...</div>
   </div>
 
   <script>
     (function() {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
       const params = new URLSearchParams(window.location.search);
       const file = params.get('file') || '';
       const title = params.get('title') || '文档查看';
       document.getElementById('docTitle').textContent = title;
-      const frame = document.getElementById('pdfFrame');
-      frame.src = file + '#toolbar=0&navpanes=0';
 
-      // Prevent common download shortcuts
+      const viewer = document.getElementById('viewer');
+      const loading = document.getElementById('loading');
+      const pageInfo = document.getElementById('pageInfo');
+
+      // Prevent download: right-click, shortcuts
+      document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
       document.addEventListener('keydown', function(e) {
-        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P')) {
-          e.preventDefault();
-          return false;
+        if ((e.ctrlKey || e.metaKey) && ['s','S','p','P','u','U'].includes(e.key)) e.preventDefault();
+        if (e.key === 'F12') e.preventDefault();
+      });
+
+      // Render PDF
+      pdfjsLib.getDocument(file).promise.then(function(pdf) {
+        loading.style.display = 'none';
+        pageInfo.textContent = '共 ' + pdf.numPages + ' 页';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          pdf.getPage(i).then(function(page) {
+            const scale = 1.2;
+            const viewport = page.getViewport({ scale: scale });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            page.render({ canvasContext: ctx, viewport: viewport });
+
+            // Watermark overlay for each page
+            ctx.fillStyle = 'rgba(0,0,0,0.03)';
+            ctx.font = '14px sans-serif';
+            ctx.fillText('仅供在线查看', viewport.width - 120, viewport.height - 20);
+
+            viewer.appendChild(canvas);
+          });
         }
+      }).catch(function(err) {
+        loading.textContent = '文档加载失败，请稍后重试';
+        console.error('PDF load error:', err);
       });
     })();
   </script>
